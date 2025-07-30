@@ -1,62 +1,76 @@
-# Import necessary libraries
+import kagglehub
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
-
+import os
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score, mean_squared_error
-from sklearn.preprocessing import LabelEncoder
 
-# Load the dataset
-# Use your dataset or this dummy CSV link if needed
-# For real project, replace this with actual path: pd.read_csv("employee_data.csv")
-data = pd.DataFrame({
-    'Experience': [1, 3, 5, 7, 9, 11, 13],
-    'Education': ['Bachelors', 'Bachelors', 'Masters', 'Masters', 'PhD', 'PhD', 'PhD'],
-    'Role': ['Analyst', 'Analyst', 'Manager', 'Manager', 'Director', 'Director', 'VP'],
-    'Salary': [35000, 45000, 65000, 75000, 90000, 110000, 150000]
-})
+# Download Dataset
+path = kagglehub.dataset_download("anninasimon/employee-salary-dataset")
+print("Dataset downloaded to:", path)
+print("Files in folder:", os.listdir(path))
 
-# Display the first few rows
+# Load Correct CSV
+csv_file = os.path.join(path, "Employee_Salary_Dataset.csv")
+data = pd.read_csv(csv_file)
+
+# Preview and Info
 print("Dataset Preview:")
 print(data.head())
+print("\nDataset Info:")
+print(data.info())
 
-# Encode categorical features
-le_education = LabelEncoder()
-le_role = LabelEncoder()
+# Drop missing values
+data = data.dropna()
 
-data['Education'] = le_education.fit_transform(data['Education'])
-data['Role'] = le_role.fit_transform(data['Role'])
+# Select valid features and target
+X = data[['Experience_Years', 'Age', 'Gender']]
+y = np.log1p(data['Salary'])  # Apply log scale to target
 
-# Define features and label
-X = data[['Experience', 'Education', 'Role']]
-y = data['Salary']
+# One-hot encode Gender
+X = pd.get_dummies(X, drop_first=True)
 
-# Split the data
+# Split data
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# Train a Linear Regression model
+# Train model
 model = LinearRegression()
 model.fit(X_train, y_train)
 
-# Predict
-y_pred = model.predict(X_test)
+# Predictions (in log scale)
+y_pred_log = model.predict(X_test)
+
+# Convert back to original scale
+y_test_orig = np.expm1(y_test)
+y_pred = np.expm1(y_pred_log)
+
+# Coefficients
+print("\nModel Coefficients:")
+print("Feature Coefficients:", model.coef_)
+print("Intercept:", model.intercept_)
 
 # Evaluation
-r2 = r2_score(y_test, y_pred)
-rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-
+r2 = r2_score(y_test_orig, y_pred)
+rmse = np.sqrt(mean_squared_error(y_test_orig, y_pred))
 print(f"\nModel Evaluation:\nR² Score: {r2:.2f}\nRMSE: {rmse:.2f}")
 
-# Visualize Predictions vs Actual
-plt.figure(figsize=(6,4))
-plt.scatter(y_test, y_pred, color='blue')
-plt.plot([y.min(), y.max()], [y.min(), y.max()], color='red', linestyle='--')
+# Manual predictions
+print("\nManual Predictions:")
+sample = X_test.head()
+print("Input Features:\n", sample)
+print("Predicted Salaries:", np.expm1(model.predict(sample)))
+
+# Actual vs Predicted Plot
+plt.figure(figsize=(6, 4))
+plt.scatter(y_test_orig, y_pred, color='blue', label="Predicted")
+plt.plot([min(y_test_orig), max(y_test_orig)], [min(y_test_orig), max(y_test_orig)],
+         color='red', linestyle='--', label="Ideal")
 plt.xlabel("Actual Salary")
 plt.ylabel("Predicted Salary")
 plt.title("Actual vs Predicted Salary")
+plt.legend()
 plt.grid(True)
 plt.tight_layout()
 plt.show()
